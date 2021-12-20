@@ -2,12 +2,9 @@
 #include <SD.h>
 #define CS_PIN 10
 
-short int  periodo = 250;
-short int  periodoFlush = 5000;
+short int  periodo = 100;
 unsigned long long int tiempoAhora = 0;
-unsigned long long int tiempoAhora2 = 0;
 Adafruit_MPU6050 mpu;
-File textFile;
 
 void setup() {
   Serial.begin(115200);
@@ -17,52 +14,50 @@ void setup() {
 }
 
 void setupAcelerometro() {
-  Serial.println("1");
-  while (!mpu.begin()) {
-    
-  Serial.println("2");
-    delay(1000);
-  }
+  while (!mpu.begin()) delay(100);
   mpu.setAccelerometerRange(MPU6050_RANGE_16_G);
 }
 
 void setupMemory() {
-  SD.begin(CS_PIN);
-  textFile = SD.open("info.txt", FILE_WRITE);
+  if (!SD.begin(CS_PIN)) {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    while (1);
+  }
+  Serial.println("card initialized.");
 }
 
 void loop() {
-  if (millis() > tiempoAhora + periodo) {    
-    writeAceleracion();        
+  if (millis() > tiempoAhora + periodo) {
+    String dataString = "";
+    readAceleracion(dataString);
+    Serial.println(dataString);
+
+    File dataFile = SD.open("info.txt", FILE_WRITE);
+    if (dataFile) {
+      dataFile.println(dataString);
+      dataFile.close();
+      // print to the serial port too:
+      Serial.println(dataString);
+    }
+    // if the file isn't open, pop up an error:
+    else {
+      Serial.println("error opening datalog.txt");
+    }
+
     tiempoAhora = millis();
   }
-
-  if (millis() > tiempoAhora2 + periodoFlush) {
-    textFile.flush();
-    Serial.println("flush");
-    tiempoAhora2 = millis();
-  }
 }
 
-void writeAceleracion() {
-  Serial.println("writeAceleracion");
+void readAceleracion(String& dataString) {
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
-
-  writeNumber("{ t:", millis(), ", ");
-  writeNumber("temp:", temp.temperature, ", ");
-  writeNumber("a: { X:", a.acceleration.x, ", ");
-       writeNumber("Y:", a.acceleration.y, ", ");
-       writeNumber("Z:", a.acceleration.z, "}, ");
-  writeNumber("g: { X:", g.gyro.x, ", ");
-       writeNumber("Y:", g.gyro.y, ", ");
-       writeNumber("Z:", g.gyro.z, "}}\r\n");
-}
-
-void writeNumber (const char* pre, float numero, const char* pos) {
-  char result[8]; // Buffer big enough for 7-character float
-  dtostrf(numero, 6, 2, result);
-  textFile.write(pre);
-  textFile.write(result);
-  textFile.write(pos);
+  dataString += "{t:" + String(millis());
+  dataString += ",temp:" + String(temp.temperature);
+  dataString += ",a:{ X:" + String(a.acceleration.x);
+  dataString += ",Y:" + String(a.acceleration.y);
+  dataString += ",Z:" + String(a.acceleration.z);
+  dataString += "},g:{ X:" + String(g.gyro.x);
+  dataString += ",Y:" + String(g.gyro.y);
+  dataString += ",Z:" + String(g.gyro.z) + "}}";
 }
